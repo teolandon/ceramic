@@ -21,7 +21,10 @@ enum editorKey {
   ARROW_UP,
   ARROW_DOWN,
   PAGE_UP,
-  PAGE_DOWN
+  PAGE_DOWN,
+  HOME_KEY,
+  END_KEY,
+  DELETE_KEY
 };
 
 /* Structs
@@ -100,8 +103,13 @@ int editorReadKey() {
         }
         if (seq[2] == '~') {
           switch (seq[1]) {
+            case '1': return HOME_KEY;
+            case '3': return DELETE_KEY;
+            case '4': return END_KEY;
             case '5': return PAGE_UP;
             case '6': return PAGE_DOWN;
+            case '7': return HOME_KEY;
+            case '8': return END_KEY;
           }
         }
       }
@@ -111,14 +119,21 @@ int editorReadKey() {
           case 'B': return ARROW_DOWN;
           case 'C': return ARROW_RIGHT;
           case 'D': return ARROW_LEFT;
+          case 'H': return HOME_KEY;
+          case 'F': return END_KEY;
         }
       }
     }
-
+    else if (seq[0] == 'O') {
+      switch (seq[1]) {
+        case 'H': return HOME_KEY;
+        case 'F': return END_KEY;
+      }
+    }
     return '\x1b';
   }
   else {
-    return 'c';
+    return c;
   }
 }
 
@@ -229,7 +244,7 @@ void editorRefreshScreen() {
   snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);
   abAppend(&ab, buf, strlen(buf));
 
-  abAppend(&ab, "\x1b[?25h", 3);
+  abAppend(&ab, "\x1b[?25h", 6);
 
   write(STDOUT_FILENO, ab.b, ab.length);
   abFree(&ab);
@@ -273,16 +288,22 @@ void editorProcessKeypress() {
       break;
 
     // Page up-down
-/*
-    case PAGE_UP:
-    case PAGE_DOWN:
-      {
-        int times = E.screenrows;
-        while (times--)
-          editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
-      }
+
+    case HOME_KEY:
+      E.cx = 0;
       break;
-*/
+
+    case END_KEY:
+      E.cx = E.screencols - 1;
+      break;
+
+    case PAGE_UP:
+      E.cy = 0;
+      break;
+    case PAGE_DOWN:
+      E.cy = E.screenrows - 1;
+      break;
+
     // Arrow keys
     case ARROW_LEFT:
     case ARROW_RIGHT:
@@ -290,6 +311,7 @@ void editorProcessKeypress() {
     case ARROW_DOWN:
       editorMoveCursor(c);
       break;
+
   }
 }
 
@@ -300,7 +322,7 @@ void initEditor() {
   E.cy = 0;
 
   if (getWindowSize(&E.screenrows, &E.screencols) == -1)
-    die("getWindowSizzzz");
+    die("getWindowSize");
 }
 
 /* Main */
