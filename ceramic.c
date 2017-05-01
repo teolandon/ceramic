@@ -1,11 +1,16 @@
 /* Include statements */
 
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -35,10 +40,17 @@ enum editorKey {
  *
  */
 
+typedef struct erow {
+  int size;
+  char *chars;
+} erow;
+
 struct editorConfig {
   int cx, cy;
   int screenrows;
   int screencols;
+  int numrows;
+  erow *row;
   struct termios orig_termios;
 };
 
@@ -180,6 +192,40 @@ int getWindowSize(int *rows, int *cols) {
   }
 }
 
+/* row operations */
+
+void editorAppendRow (char *s, size_t length) {
+  E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
+  
+  int i = E.numrows;
+  E.row[i].size = length;
+  E.row[i].chars = malloc(length + 1);
+  memcpy(E.row[i].chars, s, length);
+  E.row[i].chars[length] = '\0';
+  E.numrows++;
+}
+
+/* File I/O */
+
+void editorOpen(char *filename) {
+  FILE *fp = fopen(filename, "r");
+  if (!fp)
+    die("fopen");
+
+  char *line = NULL;
+  size_t linecap = 0;
+  ssize_t linelen;
+  
+  while ((linelen = getline(&line, &linecap, fp)) != -1) {
+    while (linelen > 0 && (line[linelen - 1] == '\n' ||
+                           line[linelen - 1] == '\r'))
+      linelen--;
+    editorAppendRow(line, linelen);
+  }
+  free(line);
+  fclose(fp);
+}
+
 /* Append Buffer */
 
 struct abuf {
@@ -204,32 +250,42 @@ void abFree(struct abuf *ab) {
 
 void editorDrawRows(struct abuf *ab) {
   int i;
-
   for (i=0; i < E.screenrows - 1; i++) {
-    if (i == E.screenrows / 3) {
-      char welcome[80];
-      int welcomelen = snprintf(welcome, sizeof(welcome),
-        "Ceramic text editor -- version %s", CERAMIC_VERSION);
-      if (welcomelen > E.screencols) 
-        welcomelen = E.screencols;
+    if (i >= E.numrows) {
+      if (E.numrows == 0 && i == E.screenrows / 3) {
+        char welcome[80];
+        int welcomelen = snprintf(welcome, sizeof(welcome),
+          "Ceramic text editor -- version %s", CERAMIC_VERSION);
+        if (welcomelen > E.screencols) 
+          welcomelen = E.screencols;
 
-      int padding = (E.screencols - welcomelen) / 2;
-      if (padding) {
-        abAppend(ab, "~", 1);
-        padding--;
+        int padding = (E.screencols - welcomelen) / 2;
+        if (padding) {
+          abAppend(ab, "~", 1);
+          padding--;
+        }
+
+        while (padding--)
+          abAppend(ab, " ", 1);
+
+        abAppend(ab, welcome, welcomelen);
       }
-
-      while (padding--)
-        abAppend(ab, " ", 1);
-
-      abAppend(ab, welcome, welcomelen);
-      abAppend(ab, "\r\n", 2);
+      else {
+        abAppend(ab, "~", 1);
+      }
     }
     else {
-      abAppend(ab, "~\x1b[K\r\n", 6);
+      int len = E.row[i].size;
+      if (len > E.screencols)
+        len = E.screencols;
+      abAppend(ab, E.row[i].chars, len);
+    }
+
+    abAppend(ab, "\x1b[K", 3);
+    if (i < E.screenrows - 1) {
+      abAppend(ab, "\r\n", 2);
     }
   }
-  abAppend(ab, "~\x1b[K", 4);
 }
 
 void editorRefreshScreen() {
@@ -320,6 +376,8 @@ void editorProcessKeypress() {
 void initEditor() {
   E.cx = 0;
   E.cy = 0;
+  E.numrows=0;
+  E.row = NULL;
 
   if (getWindowSize(&E.screenrows, &E.screencols) == -1)
     die("getWindowSize");
@@ -327,15 +385,16 @@ void initEditor() {
 
 /* Main */
 
-int main() {
+int main(int argc, char*argv[]) {
 
   enableRawMode();
   initEditor();
-  
-  while (1) {
+  if(argc >= 2) {
+    editorOpen(argv[1]);
+  }
+
+  while(1) {
     editorRefreshScreen();
     editorProcessKeypress();
   }
-  return 0;
-
 }
