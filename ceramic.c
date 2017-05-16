@@ -26,6 +26,8 @@
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
+
+/* Keys enum */
 enum editorKey {
   BACKSPACE = 127,
   ARROW_LEFT = 1000,
@@ -39,26 +41,34 @@ enum editorKey {
   DELETE_KEY
 };
 
-/* struct erow
- *
+/* Doc: struct erow
+ ---------------------------------------------- 
  * A single row in the open buffer
  *
- * int size
+ * int size:
+ *
  * * the number of characters in the row
  * * size + 1 = size of the array
- * int rsize
+ *
+ * int rsize:
+ *
  * * the length of the row in character widths
  * * Tabs = 8 spaces, so 8 character widths
  * * * Insert all such examples here
- * char *chars
+ *
+ * char *chars:
+ *
  * * character array, with length size+1
  * * 0 terminated
  * * contains all characters in row
- * char *render
+ *
+ * char *render:
+ *
  * * character array, with length rsize+1
  * * 0 terminated
  * * contains all characters to be rendered
- */
+ *
+ ----------------------------------------------*/
 typedef struct erow {
   int size;
   int rsize;
@@ -66,7 +76,68 @@ typedef struct erow {
   char *render;
 } erow;
 
+/* Doc: struct editorConfig
+ ---------------------------------------------- 
+ * Current configuration of an editor
+ *
+ * int cx, cy:
+ *
+ * * current position of the cursor in terms of
+ * *     rows and characters in row
+ *
+ * int rx:
+ *
+ * * currect horizontal position of the cursor
+ * *     in terms of rendered characters (see 
+ * *     Doc: _______ for more info) 
+ *
+ * int rowoff, coloff:
+ *
+ * * row and coloumn offset in display from
+ * *     beginning of file, used for scrolling
+ *
+ * int screenrows, screencols, numrows:
+ *
+ * * current total screen rows and columns,
+ * *     and total number of rows in file
+ *
+ * erow *row:
+ *
+ * * dynamically allocated array of rows in file
+ * * size = numrows
+ *
+ * int dirty:
+ *
+ * * indicates whether the open file has been 
+ * *     modified or not
+ * * dirty = 0 when file hasn't been modified
+ * * dirty > 0 when file has been modified 
+ *
+ * char *filename:
+ *
+ * * string of the filename of open file
+ * * when NULL, editor works, but prompts for
+ * *     filename on save
+ *
+ * char statusmsg[80]:
+ *
+ * * current status message, displayed on 
+ * *     statusbar
+ * * maximum of 80 [Convert to a constant]
+ *
+ * time_t statusmsg_time:
+ *
+ * * time when statusmsg was set, used to 
+ * *     calculate when the message expires
+ *
+ * struct termios orig_termios:
+ *
+ * * termios struct used to set terminal
+ * *     values
+ *
+ ----------------------------------------------*/
 struct editorConfig {
+
   int cx, cy;
   int rx;
 
