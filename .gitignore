@@ -1,2 +1,5 @@
 # vim .swp files
 *.swp
+
+# The executable
+ceramic

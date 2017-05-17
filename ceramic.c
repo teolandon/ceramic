@@ -161,12 +161,13 @@ struct editorConfig {
 
 struct editorConfig E;
 
-/* Function Declerations */
+/* Function Declarations */
 
 void editorSetStatusMessage(const char *fmt, ...);
 void editorClearStatusMessage();
 void editorRefreshScreen();
 char *editorPrompt(char *prompt);
+int editorRowRxToCx(erow *row, int rx);
 
 /* Terminal sets */
 
@@ -775,11 +776,13 @@ void editorMoveCursor(int key) {
     case ARROW_UP:
       if (E.cy != 0) {
         E.cy--;
+        E.cx = editorRowRxToCx(&E.row[E.cy], E.rx);
       }
       break;
     case ARROW_DOWN:
       if (E.cy < E.numrows) {
         E.cy++;
+        E.cx = editorRowRxToCx(&E.row[E.cy], E.rx);
       }
       break;
   }
