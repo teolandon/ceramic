@@ -148,6 +148,8 @@ struct editorConfig {
   int screencols;
   int numrows;
 
+  int r_mov;
+
   erow *row;
 
   int dirty;
@@ -550,7 +552,7 @@ void editorFind() {
     char *match = strstr(row->render, query);
     if (match) {
       E.cy = i;
-      E.cx = match - row->render;
+      E.cx = editorRowRxToCx(row, match - row->render);
       E.rowoff = E.numrows;
       break;
     }
@@ -582,8 +584,7 @@ void abFree(struct abuf *ab) {
 /* Output */
 
 void editorScroll() {
-  E.rx = 0;
-  if (E.cy < E.numrows) {
+  if (E.cy < E.numrows && E.r_mov) {
     E.rx = editorRowCxToRx(&E.row[E.cy], E.cx);
   }
 
@@ -689,8 +690,9 @@ void editorRefreshScreen() {
   editorDrawMessageBar(&ab);
 
   char buf[32];
+  int rx = editorRowCxToRx(&E.row[E.cy], E.cx);
   snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (E.cy - E.rowoff) + 1, 
-                                            (E.rx - E.coloff) + 1);
+                                            (rx - E.coloff) + 1);
   abAppend(&ab, buf, strlen(buf));
 
   abAppend(&ab, "\x1b[?25h", 6);
@@ -763,6 +765,7 @@ void editorMoveCursor(int key) {
         E.cy--;
         E.cx = E.row[E.cy].size;
       }
+      E.r_mov = 1;
       break;
     case ARROW_RIGHT:
       if (row && E.cx < row->size) {
@@ -772,17 +775,24 @@ void editorMoveCursor(int key) {
         E.cy++;
         E.cx = 0;
       }
+      E.r_mov = 1;
       break;
     case ARROW_UP:
       if (E.cy != 0) {
         E.cy--;
         E.cx = editorRowRxToCx(&E.row[E.cy], E.rx);
+        E.r_mov = 0;
+      }
+      else {
+        E.cx = 0;
+        E.r_mov = 1;
       }
       break;
     case ARROW_DOWN:
       if (E.cy < E.numrows) {
         E.cy++;
         E.cx = editorRowRxToCx(&E.row[E.cy], E.rx);
+        E.r_mov = 0;
       }
       break;
   }
@@ -829,6 +839,10 @@ void editorProcessKeypress() {
     case END_KEY:
       if (E.cy < E.numrows)
         E.cx = E.row[E.cy].size;
+      break;
+
+    case CTRL_KEY('f'):
+      editorFind();
       break;
 
     case BACKSPACE:
@@ -883,6 +897,8 @@ void initEditor() {
 
   E.rowoff = 0;
   E.coloff = 0;
+  
+  E.r_mov = 0;
 
   E.numrows=0;
   E.row = NULL;
@@ -907,7 +923,7 @@ int main(int argc, char*argv[]) {
     editorOpen(argv[1]);
   }
 
-  editorSetStatusMessage("HELP: Ctrl-S: Save | Ctrl-Q: Quit");
+  editorSetStatusMessage("HELP: Ctrl-S: Save | Ctrl-Q: Quit | Ctrl-F: Find");
 
   while(1) {
     editorRefreshScreen();
