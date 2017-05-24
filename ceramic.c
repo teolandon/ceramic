@@ -41,6 +41,13 @@ enum editorKey {
   DELETE_KEY
 };
 
+enum modes {
+  NORMAL,
+  INSERT,
+  VISUAL,
+  TEST
+};
+
 /* Doc: struct erow
  ----------------------------------------------
  * A single row in the open buffer
@@ -137,6 +144,7 @@ typedef struct erow {
  *
  ----------------------------------------------*/
 struct editorConfig {
+  int mode;
 
   int cx, cy;
   int rx;
@@ -803,6 +811,7 @@ void editorMoveCursor(int key) {
 
   switch (key) {
     case ARROW_LEFT:
+    case 'h':
       if (E.cx != 0) {
         E.cx--;
       }
@@ -813,6 +822,7 @@ void editorMoveCursor(int key) {
       E.r_mov = 1;
       break;
     case ARROW_RIGHT:
+    case 'l':
       if (row && E.cx < row->size) {
         E.cx++;
       }
@@ -823,6 +833,7 @@ void editorMoveCursor(int key) {
       E.r_mov = 1;
       break;
     case ARROW_UP:
+    case 'k':
       if (E.cy != 0) {
         E.cy--;
         E.cx = editorRowRxToCx(&E.row[E.cy], E.rx);
@@ -834,6 +845,7 @@ void editorMoveCursor(int key) {
       }
       break;
     case ARROW_DOWN:
+    case 'j':
       if (E.cy < E.numrows) {
         E.cy++;
         E.cx = editorRowRxToCx(&E.row[E.cy], E.rx);
@@ -856,77 +868,107 @@ void editorProcessKeypress() {
   // Clear Statusbar from modified file warning message
   editorClearStatusMessage();
 
-  switch (c) {
-    case '\r':
-      editorInsertNewline();
-      break;
-    case CTRL_KEY('q'):
-      if(E.dirty && --quit_times) {
-        editorSetStatusMessage("Warning: File has been modified. "
-            "Press Ctrl-Q to exit without saving changes.");
-        return;
+  // Mode switch statement
+  switch (E.mode) {
+
+    case INSERT:
+      switch (c) {
+        case '\r':
+          editorInsertNewline();
+          break;
+        case CTRL_KEY('q'):
+          if(E.dirty && --quit_times) {
+            editorSetStatusMessage("Warning: File has been modified. "
+                "Press Ctrl-Q to exit without saving changes.");
+            return;
+          }
+          write(STDOUT_FILENO, "\x1b[2J", 4);
+          write(STDOUT_FILENO, "\x1b[H", 3);
+          exit(0);
+          break;
+
+        case CTRL_KEY('s'):
+          editorSave();
+          break;
+
+        // Page up-down
+
+        case HOME_KEY:
+          E.cx = 0;
+          break;
+
+        case END_KEY:
+          if (E.cy < E.numrows)
+            E.cx = E.row[E.cy].size;
+          break;
+
+        case CTRL_KEY('f'):
+          editorFind();
+          break;
+
+        case BACKSPACE:
+        case CTRL_KEY('h'):
+        case DELETE_KEY:
+          if (c == DELETE_KEY)
+            editorMoveCursor(ARROW_RIGHT);
+          editorDeleteChar();
+          break;
+
+        case PAGE_UP:
+        case PAGE_DOWN:
+          {
+            if(c == PAGE_UP)
+              E.cy = E.rowoff;
+            else if (c == PAGE_DOWN) {
+              E.cy = E.rowoff + E.screenrows - 1;
+              if (E.cy > E.numrows)
+               E.cy = E.numrows;
+            }
+            int times = E.screenrows;
+            while (times--)
+              editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+          }
+
+        // Arrow keys
+        case ARROW_LEFT:
+        case ARROW_RIGHT:
+        case ARROW_UP:
+        case ARROW_DOWN:
+          editorMoveCursor(c);
+          break;
+
+        case CTRL_KEY('l'):
+        case '\x1b':
+          E.mode = NORMAL;
+          break;
+
+        default:
+          editorInsertChar(c);
+          break;
       }
-      write(STDOUT_FILENO, "\x1b[2J", 4);
-      write(STDOUT_FILENO, "\x1b[H", 3);
-      exit(0);
       break;
 
-    case CTRL_KEY('s'):
-      editorSave();
-      break;
-
-    // Page up-down
-
-    case HOME_KEY:
-      E.cx = 0;
-      break;
-
-    case END_KEY:
-      if (E.cy < E.numrows)
-        E.cx = E.row[E.cy].size;
-      break;
-
-    case CTRL_KEY('f'):
-      editorFind();
-      break;
-
-    case BACKSPACE:
-    case CTRL_KEY('h'):
-    case DELETE_KEY:
-      if (c == DELETE_KEY)
-        editorMoveCursor(ARROW_RIGHT);
-      editorDeleteChar();
-      break;
-
-    case PAGE_UP:
-    case PAGE_DOWN:
-      {
-        if(c == PAGE_UP)
-          E.cy = E.rowoff;
-        else if (c == PAGE_DOWN) {
-          E.cy = E.rowoff + E.screenrows - 1;
-          if (E.cy > E.numrows)
-           E.cy = E.numrows;
-        }
-        int times = E.screenrows;
-        while (times--)
-          editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+    case NORMAL:
+      switch(c) {
+        case 'h':
+        case 'j':
+        case 'k':
+        case 'l':
+          editorMoveCursor(c);
+          break;
+        case 'i':
+          E.mode = INSERT;
+        case CTRL_KEY('q'):
+          if(E.dirty && --quit_times) {
+            editorSetStatusMessage("Warning: File has been modified. "
+                "Press Ctrl-Q to exit without saving changes.");
+            return;
+          }
+          write(STDOUT_FILENO, "\x1b[2J", 4);
+          write(STDOUT_FILENO, "\x1b[H", 3);
+          exit(0);
+          break;
       }
-
-    // Arrow keys
-    case ARROW_LEFT:
-    case ARROW_RIGHT:
-    case ARROW_UP:
-    case ARROW_DOWN:
-      editorMoveCursor(c);
-      break;
-
-    case CTRL_KEY('l'):
-    case '\x1b':
-      break;
-
-    default:
-      editorInsertChar(c);
       break;
   }
 
@@ -936,6 +978,8 @@ void editorProcessKeypress() {
 /* Initialization */
 
 void initEditor() {
+  E.mode = NORMAL;
+
   E.cx = 0;
   E.cy = 0;
   E.rx = 0;
