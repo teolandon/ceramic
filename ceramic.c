@@ -815,7 +815,7 @@ void editorMoveCursor(int key) {
       if (E.cx != 0) {
         E.cx--;
       }
-      else if (E.cy > 0) {
+      else if (E.cy > 0 && E.mode == INSERT) {
         E.cy--;
         E.cx = E.row[E.cy].size;
       }
@@ -826,7 +826,7 @@ void editorMoveCursor(int key) {
       if (row && E.cx < row->size) {
         E.cx++;
       }
-      else if (row && E.cx == row->size) {
+      else if (row && E.cx == row->size && E.mode == INSERT) {
         E.cy++;
         E.cx = 0;
       }
@@ -839,7 +839,7 @@ void editorMoveCursor(int key) {
         E.cx = editorRowRxToCx(&E.row[E.cy], E.rx);
         E.r_mov = 0;
       }
-      else {
+      else if (E.mode == INSERT){
         E.cx = 0;
         E.r_mov = 1;
       }
@@ -856,8 +856,8 @@ void editorMoveCursor(int key) {
 
   row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
   int rowlen = row ? row->size : 0;
-  if (E.cx > rowlen) {
-    E.cx = rowlen;
+  if (E.cx >= rowlen) {
+    E.cx = (E.mode == NORMAL) ? rowlen - 1 : rowlen;
   }
 }
 
@@ -868,6 +868,54 @@ void editorProcessKeypress() {
   // Clear Statusbar from modified file warning message
   editorClearStatusMessage();
 
+  // Universal hotkeys
+  switch (c) {
+    case CTRL_KEY('q'):
+      if(E.dirty && --quit_times) {
+        editorSetStatusMessage("Warning: File has been modified. "
+            "Press Ctrl-Q to exit without saving changes.");
+        return;
+      }
+      write(STDOUT_FILENO, "\x1b[2J", 4);
+      write(STDOUT_FILENO, "\x1b[H", 3);
+      exit(0);
+      break;
+
+    case CTRL_KEY('s'):
+      editorSave();
+      break;
+
+    // Page up-down
+
+    case HOME_KEY:
+      E.cx = 0;
+      break;
+
+    case END_KEY:
+      if (E.cy < E.numrows)
+        E.cx = E.row[E.cy].size;
+      break;
+
+    case CTRL_KEY('f'):
+      editorFind();
+      break;
+    case PAGE_UP:
+    case PAGE_DOWN:
+      {
+        if(c == PAGE_UP)
+          E.cy = E.rowoff;
+        else if (c == PAGE_DOWN) {
+          E.cy = E.rowoff + E.screenrows - 1;
+          if (E.cy > E.numrows)
+           E.cy = E.numrows;
+        }
+        int times = E.screenrows;
+        while (times--)
+          editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+      }
+
+  }
+
   // Mode switch statement
   switch (E.mode) {
 
@@ -875,35 +923,6 @@ void editorProcessKeypress() {
       switch (c) {
         case '\r':
           editorInsertNewline();
-          break;
-        case CTRL_KEY('q'):
-          if(E.dirty && --quit_times) {
-            editorSetStatusMessage("Warning: File has been modified. "
-                "Press Ctrl-Q to exit without saving changes.");
-            return;
-          }
-          write(STDOUT_FILENO, "\x1b[2J", 4);
-          write(STDOUT_FILENO, "\x1b[H", 3);
-          exit(0);
-          break;
-
-        case CTRL_KEY('s'):
-          editorSave();
-          break;
-
-        // Page up-down
-
-        case HOME_KEY:
-          E.cx = 0;
-          break;
-
-        case END_KEY:
-          if (E.cy < E.numrows)
-            E.cx = E.row[E.cy].size;
-          break;
-
-        case CTRL_KEY('f'):
-          editorFind();
           break;
 
         case BACKSPACE:
@@ -913,21 +932,6 @@ void editorProcessKeypress() {
             editorMoveCursor(ARROW_RIGHT);
           editorDeleteChar();
           break;
-
-        case PAGE_UP:
-        case PAGE_DOWN:
-          {
-            if(c == PAGE_UP)
-              E.cy = E.rowoff;
-            else if (c == PAGE_DOWN) {
-              E.cy = E.rowoff + E.screenrows - 1;
-              if (E.cy > E.numrows)
-               E.cy = E.numrows;
-            }
-            int times = E.screenrows;
-            while (times--)
-              editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
-          }
 
         // Arrow keys
         case ARROW_LEFT:
@@ -958,6 +962,7 @@ void editorProcessKeypress() {
           break;
         case 'i':
           E.mode = INSERT;
+          break;
         case CTRL_KEY('q'):
           if(E.dirty && --quit_times) {
             editorSetStatusMessage("Warning: File has been modified. "
